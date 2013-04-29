@@ -14,6 +14,7 @@
 
 #import <QuartzCore/QuartzCore.h>
 #import "objc/runtime.h"
+#import "NSUserDefaults+GroundControl.h"
 
 #import "LARSAdController.h"
 #import "TOLAdAdapter.h"
@@ -120,11 +121,10 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
 - (void)addAdContainerToView:(UIView *)view withParentViewController:(UIViewController *)viewController{
     //remove container from superview
     //  add ad container to new view as subview at bottom
-    self.parentViewController = viewController;
-    self.parentView = view;
-    
     if (![view.subviews containsObject:_containerView]) {
         self.currentOrientation = viewController.interfaceOrientation;
+        self.parentViewController = viewController;
+        self.parentView = view;
         
         [self layoutContainerView];
         [view addSubview:self.containerView];
@@ -171,31 +171,28 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
     CGFloat width;
     CGFloat yOrigin = 0.f;
     
-    CGFloat parentWidth = CGRectGetWidth(self.parentView.frame);
-    CGFloat parentHeight = CGRectGetHeight(self.parentView.frame);
-    
     if (UIInterfaceOrientationIsLandscape(orientation)) {
         TOLLog(@"View is landscape");
         
         if (pinningLocation == LARSAdControllerPinLocationBottom) {
-            yOrigin = MIN(parentHeight, parentWidth);
+            yOrigin = CGRectGetWidth(self.parentView.frame);
         }
-        width = MAX(parentHeight, parentWidth);
+        width = CGRectGetHeight(self.parentView.frame);
         self.lastOrientationWasPortrait = NO;
     }
     else{//portrait
         TOLLog(@"View is portrait");
         
         if (pinningLocation == LARSAdControllerPinLocationBottom) {
-            yOrigin = MAX(parentHeight, parentWidth);
+            yOrigin = CGRectGetHeight(self.parentView.frame);
         }
-        width = MIN(parentHeight, parentWidth);
+        width = CGRectGetWidth(self.parentView.frame);
         self.lastOrientationWasPortrait = YES;
     }
     
     CGFloat height;
     if(UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad){
-        height = kLARSAdContainerHeightPad; 
+        height = kLARSAdContainerHeightPad;
     }
     else{
         height = kLARSAdContainerHeightPod;
@@ -266,16 +263,6 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
     }
 }
 
-- (void)setParentViewController:(UIViewController *)parentViewController{
-    _parentViewController = parentViewController;
-    
-    for (id<TOLAdAdapter> adAdapter in self.adapterInstances) {
-        if ([adAdapter respondsToSelector:@selector(setParentViewController:)]) {
-            [adAdapter setParentViewController:parentViewController];
-        }
-    }
-}
-
 #pragma mark - Ads Visible
 - (BOOL)areAnyAdsVisible{
     NSArray *instances = [self.adapterInstances allValues];
@@ -300,6 +287,333 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
     [self registerAdClass:class];
     [self.adapterClassPublisherIds setObject:publisherId forKey:NSStringFromClass(class)];
 }
+
+- (void)registerAdClass:(Class)class withPublisherId:(NSString *)publisherId withRatio:(CGFloat)adRatio withChangeIntervalInSeconds:(CGFloat)changeInterval withURL:(NSURL *)URL URLreturnsPlainText:(BOOL)plainText {
+    
+    if ([self.registeredClasses containsObject:class]) {
+        //If you need this functionality, open an issue on GitHub
+        TOLWLog(@"Registered adapter classes already contains \"%@\" class. Registering the same adapter with multiple publisher IDs is currently unsupported.", NSStringFromClass(class));
+    }
+    [self registerAdClass:class];
+    [self.adapterClassPublisherIds setObject:publisherId forKey:NSStringFromClass(class)];
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    CGFloat adapterBannerCount = 0.0, totalBannerCount = 0.0, adRatioCount = 0.0;
+    
+    for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+        
+        adRatioCount+= [defaults floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]];
+        totalBannerCount+= [defaults floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+
+    }
+    if(totalBannerCount < 1) totalBannerCount = 1;
+    adapterBannerCount = [defaults floatForKey:[NSStringFromClass(class) stringByAppendingString:@"Count"]];
+      
+    if(URL != nil && plainText == YES && adRatioCount == 1.0) {
+    
+            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:URL];
+            [[NSUserDefaults standardUserDefaults] registerDefaultsWithURLRequest:request
+                                                                      success:^(NSURLRequest *request, NSHTTPURLResponse *response, NSDictionary *defaults) {
+                                                                          
+                                                                          
+                                                                          CGFloat bannerRatio = [[defaults valueForKey:[NSStringFromClass(class) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                          
+                                                                          if(adapterBannerCount/totalBannerCount < bannerRatio && self.registeredClasses.count > 1.0) {
+                                                                              NSLog(@"Defaults > %@", defaults);
+                                                                              [self.registeredClasses removeLastObject];
+                                                                              [self.registeredClasses insertObject:class atIndex:0];
+                                                                              
+                                                                              NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f \n Total banners:%f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio, totalBannerCount);
+                                                                              
+                                                                              if(bannerRatio != adRatio) NSLog(@"Remote Plist ratio differs from specified Ad ratio, using remote Plist ratio");
+                                                                              
+                                                                          }else{
+                                                                              
+                                                                                                                                                           
+                                                                             NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f \n Total banners:%f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio, totalBannerCount);
+                                                                          
+                                                                          }
+                                                                          
+                                                                          
+                                                                      } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error) {
+                                                                          NSLog(@"Error > %@ with user info %@.", error, [error userInfo]);
+                                                                          
+                                                                          CGFloat bannerRatio = [[[NSUserDefaults standardUserDefaults] valueForKey:[NSStringFromClass(class) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                          
+                                                                          if(adapterBannerCount/totalBannerCount < adRatio) {
+                                                                              
+                                                                              [self.registeredClasses removeLastObject];
+                                                                              [self.registeredClasses insertObject:class atIndex:0];
+                                                                              
+                                                                              NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
+                                                                              
+                                                                              
+                                                                          }else{
+                                                                              
+                                                                              
+                                                                              NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
+                                                                              
+                                                                          }
+
+                                                                          
+                                                                          
+                                                                          
+                                                                      }];
+
+    }else{
+        
+        if(URL != nil && plainText == NO && adRatioCount == 1.0) {
+            
+            
+            [[NSUserDefaults standardUserDefaults] registerDefaultsWithURL:URL
+                                                                   success:^(NSDictionary *defaults) {
+                                                                   
+                                                                       CGFloat bannerRatio = [[defaults valueForKey:[NSStringFromClass(class) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                       
+                                                                       if(adapterBannerCount/totalBannerCount < bannerRatio  && self.registeredClasses.count > 1) {
+                                                                           
+                                                                           [self.registeredClasses removeLastObject];
+                                                                           [self.registeredClasses insertObject:class atIndex:0];
+                                                                           
+                                                                           NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
+                                                                                                                                                      
+                                                                       }else{
+                                                                           
+                                                                           
+                                                                           NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
+                                                                           
+                                                                       }
+
+                                                                   
+                                                                   }
+                                                                   failure:^(NSError *error) { 
+                                                                                                                                          
+                                                                       if(adapterBannerCount/totalBannerCount < adRatio  && self.registeredClasses.count > 1) {
+                                                                           
+                                                                           [self.registeredClasses removeLastObject];
+                                                                           [self.registeredClasses insertObject:class atIndex:0];
+                                                                           
+                                                                           NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, adRatio);
+                                                                           
+                                                                           
+                                                                       }else{
+                                                                           
+                                                                           
+                                                                           NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass(class), adapterBannerCount/totalBannerCount, adRatio);
+                                                                           
+                                                                       }
+                                                                       
+
+                                                                   
+                                                                   }
+             ];
+            
+            
+            
+        }else{
+                        
+            if(adapterBannerCount/totalBannerCount < adRatio && adRatioCount == 1.0) {
+                
+                [self.registeredClasses removeLastObject];
+                [self.registeredClasses insertObject:class atIndex:0];
+                
+                NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, adRatio);
+                
+                
+            }else{
+                
+                NSLog(@"Waiting for more adapters to load");
+                
+            }
+
+            
+        }
+  
+        
+    }
+    
+    if(self.registeredClasses.count == 1 && changeInterval && changeInterval > 0) [self performSelector:@selector(changeAdapter) withObject:nil afterDelay:changeInterval]; // Update only once
+        
+
+}
+
+- (void)changeAdapter {
+    
+    id <TOLAdAdapter> adapter = [self.adapterInstances objectForKey:NSStringFromClass([self.registeredClasses objectAtIndex:0])];
+    if(adapter == nil) {
+        
+        [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:1]];
+        if(self.registeredClasses.count >0) [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:0]];
+
+        
+    }else{
+        
+        [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:0]];
+        if(self.registeredClasses.count >0) [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:1]];
+    
+    }
+        
+        NSLog(@"Adapter changed");
+    
+}
+
+#pragma mark - Ratio management
+
+- (void)updateLarsAdController:(CGFloat)changeIntervalInSeconds withURL:(NSURL *)URL URLreturnsPlainText:(BOOL)plainText {
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    float totalBannerCount = 0.0;
+    
+    for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+        
+        totalBannerCount+= [defaults floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+        
+    }
+    if(totalBannerCount < 1) totalBannerCount = 1;
+
+    if(URL != nil && plainText == YES) {
+        
+        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:URL];
+        [[NSUserDefaults standardUserDefaults] registerDefaultsWithURLRequest:request
+                                                                      success:^(NSURLRequest *request, NSHTTPURLResponse *response, NSDictionary *defaults) {
+                                                                          NSLog(@"Defaults > %@", defaults);
+                                                                          
+                                                                        for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+                                                                            
+                                                                            float adapterBannerCount[self.registeredClasses.count], bannerRatio[self.registeredClasses.count];
+                                                                            
+                                                                            bannerRatio[i] = [[defaults valueForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                            
+                                                                            adapterBannerCount[i] = [[NSUserDefaults standardUserDefaults] floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+                                                                            
+                                                                            if(adapterBannerCount[i]/totalBannerCount < bannerRatio[i]) {
+                                                                                for(NSUInteger j=0; j < self.registeredClasses.count; j++) {
+                                                                                    [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:j]];
+                                                                                }
+                                                                                [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:i]];
+                                                                              
+                                                                              NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f \n Total banners:%f", NSStringFromClass([self.registeredClasses objectAtIndex:i]), NSStringFromClass([self.registeredClasses objectAtIndex:i]), adapterBannerCount[i]/totalBannerCount, bannerRatio[i], totalBannerCount);
+                                                                              
+                                                                          }else{
+                                                                              
+                                                                               
+                                                                             if(i > 0) NSLog(@"\n For adapter %@ : \n ratio is %f \n Goal ratio: %f \n Total banners:%f \n No need to change banner network", NSStringFromClass([self.registeredClasses objectAtIndex:i]), adapterBannerCount[i]/totalBannerCount, bannerRatio[i], totalBannerCount);
+                                                                              
+                                                                          }
+                                                                         
+                                                                          }
+                                                                          
+                                                                          
+                                                                      } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error) {
+                                                                          NSLog(@"Error > %@ with user info %@.", error, [error userInfo]);
+                                                                          
+                                                                          for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+                                                                              CGFloat adapterBannerCount[self.registeredClasses.count], bannerRatio[self.registeredClasses.count];
+                                                                              bannerRatio[i] = [[[NSUserDefaults standardUserDefaults] valueForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                              adapterBannerCount[i] = (CGFloat)[[NSUserDefaults standardUserDefaults] floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+                                                                              
+                                                                              if(adapterBannerCount[i]/totalBannerCount < bannerRatio[i]) {
+                                                                                  
+                                                                                  for(NSUInteger j=0; j < self.registeredClasses.count; j++) {
+                                                                                      [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:j]];
+                                                                                  }
+                                                                                  [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:i]];
+                                                                                  
+                                                                              if(i > 0)    NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:i]), NSStringFromClass([self.registeredClasses objectAtIndex:i]), adapterBannerCount[i]/totalBannerCount, bannerRatio[i]);
+                                                                                                                                                                                                                                                     
+                                                                                                                                                                                                                                                                
+                                                                                }
+                                                                            
+                                                                          }
+                                                                          
+                                                                      }];
+        
+    }else{
+        
+        if(URL != nil && plainText == NO) {
+            
+            
+            [[NSUserDefaults standardUserDefaults] registerDefaultsWithURL:URL
+                                                                   success:^(NSDictionary *defaults) {
+                                                                       
+                                                                       for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+                                                                           float adapterBannerCount[self.registeredClasses.count], bannerRatio[self.registeredClasses.count];
+                                                                           bannerRatio[i] = [[defaults valueForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                           adapterBannerCount[i] = [[NSUserDefaults standardUserDefaults] floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+                                                                           
+                                                                           if(adapterBannerCount[i]/totalBannerCount < bannerRatio[i] && i > 0) {
+                                                                               
+                                                                               Class tempClass = [self.registeredClasses objectAtIndex:i];
+                                                                               [self.registeredClasses removeObjectAtIndex:i];
+                                                                               [self.registeredClasses insertObject:tempClass atIndex:0];
+                                                                               
+                                                                               NSLog(@"%@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass([self.registeredClasses objectAtIndex:0]), adapterBannerCount[i]/totalBannerCount, bannerRatio[i]);
+                                                                               
+                                                                           }
+                                                                   }
+                                                                   }
+             
+             
+                                                                   failure:^(NSError *error) {
+                                                                       
+                                                                       for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+                                                                           CGFloat adapterBannerCount[self.registeredClasses.count];
+                                                                           CGFloat bannerRatio = [[[NSUserDefaults standardUserDefaults] valueForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]] floatValue];
+                                                                           adapterBannerCount[i] = (CGFloat)[[NSUserDefaults standardUserDefaults] floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+                                                                           
+                                                                           if(adapterBannerCount[i]/totalBannerCount < bannerRatio && i > 0) {
+                                                                               
+                                                                               Class tempClass = [self.registeredClasses objectAtIndex:i];
+                                                                               [self.registeredClasses removeObjectAtIndex:i];
+                                                                               [self.registeredClasses insertObject:tempClass atIndex:0];
+                                                                               
+                                                                             if(i > 0)  NSLog(@"%@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass([self.registeredClasses objectAtIndex:0]), adapterBannerCount[i]/totalBannerCount, bannerRatio);
+                                                                               
+                                                                               
+                                                                               
+                                                                           }
+                                                                           
+                                                                       }
+                                                                       
+                                                                       
+                                                                       
+                                                                       
+                                                                   }];
+            
+            
+            
+        }else{
+            
+            for(NSUInteger i=0; i < self.registeredClasses.count; i++) {
+                CGFloat adapterBannerCount[self.registeredClasses.count];
+                CGFloat bannerRatio = [[[NSUserDefaults standardUserDefaults] valueForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Ratio"]] floatValue];
+                adapterBannerCount[i] = (CGFloat)[[NSUserDefaults standardUserDefaults] floatForKey:[NSStringFromClass([self.registeredClasses objectAtIndex:i]) stringByAppendingString:@"Count"]];
+                
+                if(adapterBannerCount[i]/totalBannerCount < bannerRatio && i > 0) {
+                    
+                    Class tempClass = [self.registeredClasses objectAtIndex:i];
+                    [self.registeredClasses removeObjectAtIndex:i];
+                    [self.registeredClasses insertObject:tempClass atIndex:0];
+                    
+                    NSLog(@"%@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass([self.registeredClasses objectAtIndex:0]), NSStringFromClass([self.registeredClasses objectAtIndex:0]), adapterBannerCount[i]/totalBannerCount, bannerRatio);
+                    
+                    
+                    
+                }
+                
+            }
+            
+        
+        }
+    
+    
+    }
+     
+     [self performSelector:@selector(changeAdapter) withObject:nil afterDelay:changeIntervalInSeconds];
+
+
+}
+
 
 - (void)registerAdClass:(Class)class{
     
@@ -341,7 +655,9 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
 - (void)adInstanceNowAvailableForDeallocation:(id <TOLAdAdapter>)adapter{
     if ([self.instancesToCleanUp containsObject:adapter]) {
         [self animateBannerForAdapterHidden:adapter withCompletion:^{
-            [self cleanUpAdAdapter:adapter];
+            [adapter.bannerView removeFromSuperview];
+            [self.adapterInstances removeObjectForKey:NSStringFromClass(adapter.class)];
+            [self.instancesToCleanUp removeObject:adapter];
         }];
     }
 }
@@ -361,6 +677,7 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
         [self.instancesToCleanUp removeObject:adapter];
     }
 }
+
 
 #pragma mark - Banner Frames
 - (void)animateBannerForAdapterVisible:(id <TOLAdAdapter>)adapter withCompletion:(void(^)(void))completion{
@@ -457,13 +774,13 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                             finalBannerFrame.origin.y);
         }
             break;
-case LARSAdControllerPresentationTypeTop:{
-    CGRect finalBannerFrame = [self onScreenBannerFrameForAdapter:adapter
-                                              withPinningLocation:self.pinningLocation];
-
+        case LARSAdControllerPresentationTypeTop:{
+            CGRect finalBannerFrame = [self onScreenBannerFrameForAdapter:adapter
+                                                      withPinningLocation:self.pinningLocation];
+            
             beginFrame.origin = CGPointMake(finalBannerFrame.origin.x,
                                             -bannerViewSize.height);
-}
+        }
             break;
     }
     
@@ -477,7 +794,7 @@ case LARSAdControllerPresentationTypeTop:{
 }
 
 - (CGRect)onScreenBannerFrameForAdapter:(id<TOLAdAdapter>)adapter withPinningLocation:(LARSAdControllerPinLocation)pinningLocation{
-
+    
     CGRect finalFrame;
     CGSize bannerViewSize = adapter.bannerView.frame.size;
     
@@ -500,6 +817,9 @@ case LARSAdControllerPresentationTypeTop:{
     
     return finalFrame;
 }
+
+
+
 
 #pragma mark - Starting/Stopping
 - (void)startAdNetworkAdapterClassAtIndex:(NSInteger)index{
@@ -531,8 +851,8 @@ case LARSAdControllerPresentationTypeTop:{
         }
         
         Method requiresPublisherId = class_getClassMethod(class, @selector(requiresPublisherId));
-
-//Let clang know I know what I'm doing
+        
+        //Let clang know I know what I'm doing
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         if(requiresPublisherId &&
@@ -671,7 +991,8 @@ case LARSAdControllerPresentationTypeTop:{
                 if ([adapter respondsToSelector:@selector(canDestroyAdBanner)]) {
                     if ([adapter canDestroyAdBanner]) {
                         TOLLog(@"Destroying %@ ad network instance", friendlyNetworkDescription);
-                        [self cleanUpAdAdapter:adapter];
+                        [adapter.bannerView removeFromSuperview];
+                        [self.adapterInstances removeObjectForKey:NSStringFromClass(class)];
                         
                         destroyed = YES;
                     }
@@ -679,7 +1000,8 @@ case LARSAdControllerPresentationTypeTop:{
                 else{
                     //assume yes
                     TOLLog(@"Destroying %@ ad network instance", friendlyNetworkDescription);
-                    [self cleanUpAdAdapter:adapter];
+                    [adapter.bannerView removeFromSuperview];
+                    [self.adapterInstances removeObjectForKey:NSStringFromClass(class)];
                     
                     destroyed = YES;
                 }
@@ -706,10 +1028,7 @@ case LARSAdControllerPresentationTypeTop:{
         self.registeredForOrientationChanges = YES;
         
         [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(handleOrientationNotification:)
-                                                     name:UIDeviceOrientationDidChangeNotification
-                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleOrientationNotification:) name:UIDeviceOrientationDidChangeNotification object:nil];
     }
 }
 
@@ -718,9 +1037,7 @@ case LARSAdControllerPresentationTypeTop:{
         TOLLog(@"Unregistering for orientation notifications");
         
         [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
-        [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                        name:UIDeviceOrientationDidChangeNotification
-                                                      object:nil];
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:UIDeviceOrientationDidChangeNotification object:nil];
         
         self.registeredForOrientationChanges = NO;
     }
@@ -765,7 +1082,7 @@ case LARSAdControllerPresentationTypeTop:{
     for (id <TOLAdAdapter> adapterInstance in instances) {
         if (adapterInstance.adVisible) {
             [self animateBannerForAdapterHidden:adapterInstance withCompletion:^{
-                [self cleanUpAdAdapter:adapterInstance];
+                [adapterInstance.bannerView removeFromSuperview];
             }];
         }
     }

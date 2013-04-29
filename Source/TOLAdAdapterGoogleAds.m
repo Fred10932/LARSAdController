@@ -103,6 +103,14 @@
         [self.adManager adSucceededForNetworkAdapterClass:[self class]];
     }
     
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    CGFloat googleBannerCount = [defaults floatForKey:[NSStringFromClass(self.class) stringByAppendingString:@"Count"]];
+    googleBannerCount++;
+    [defaults setInteger:googleBannerCount forKey:[NSStringFromClass(self.class) stringByAppendingString:@"Count"]];
+    [defaults synchronize];
+
+    
+    
     TOLLog(@"Google ad did receive ad");
 }
 

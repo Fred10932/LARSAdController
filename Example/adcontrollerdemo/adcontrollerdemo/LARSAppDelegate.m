@@ -42,7 +42,7 @@
         //This publisher id is a test account setup to test google ads since there is no good way to only send test ads without one - ad request will simply fail
         NSString *strRevMob = @"516ba3bf2d5537a5a0000013"; // Test account set up for this purpose
         NSString *strAdMob = @"a14e55c99c24b43";
-        NSURL *URL = [NSURL URLWithString:@"http://github.com/Fred10932/LARSAdController/blob/Managed_Adapter/adsettings.plist"];
+        NSURL *URL = [NSURL URLWithString:@"http://github.com/Fred10932/LARSAdController/blob/Managed_Adapter/Example/adcontrollerdemo/adsettings.plist"];
         
         [[LARSAdController sharedManager] registerAdClass:[TOLAdAdapterGoogleAds class] withPublisherId:strAdMob withRatio:0.5f withChangeIntervalInSeconds:120.0f withURL:URL URLreturnsPlainText:YES];
         [[LARSAdController sharedManager] registerAdClass:[TOLAdAdapterRevMobAds class] withPublisherId:strRevMob withRatio:0.5f withChangeIntervalInSeconds:120.0f withURL:URL URLreturnsPlainText:YES];

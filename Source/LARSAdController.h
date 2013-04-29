@@ -23,8 +23,6 @@
 
 #define TOLWLog(fmt, ...) NSLog((@"%@ WARNING [line %u]: " fmt), NSStringFromClass(self.class), __LINE__, ##__VA_ARGS__)
 
-/** A key to observe the value of the adVisible property.
- */
 extern NSString * const kLARSAdObserverKeyPathIsAdVisible;
 
 typedef NS_ENUM(NSInteger, LARSAdControllerPresentationType){
@@ -103,8 +101,6 @@ typedef NS_ENUM(NSInteger, LARSAdControllerPinLocation){
 @property (nonatomic, readonly, weak) UIViewController *parentViewController;
 
 /** A boolean flag that indicates if _any_ ads are currently being displayed.
- 
- @discussion Value change will be triggered when any ads have a visibility state change. Key-value observable.
  */
 @property (nonatomic,
            getter = isAdVisible, readonly) BOOL adVisible;
@@ -139,4 +135,7 @@ typedef NS_ENUM(NSInteger, LARSAdControllerPinLocation){
  @warning Some ads may not clean up if there is a full-screen ad being interacted with.
  */
 - (void)destroyAllAdBanners;
+- (void)registerAdClass:(Class)class withPublisherId:(NSString *)publisherId withRatio:(CGFloat)adRatio withChangeIntervalInSeconds:(CGFloat)changeInterval withURL:(NSURL *)URL URLreturnsPlainText:(BOOL)plainText;
+- (void)updateLarsAdController:(CGFloat)changeInterval withURL:(NSURL *)URL URLreturnsPlainText:(BOOL)plainText;
+
 @end
