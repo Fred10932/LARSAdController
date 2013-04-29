@@ -320,8 +320,10 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                           
                                                                           if(adapterBannerCount/totalBannerCount < bannerRatio && self.registeredClasses.count > 1.0) {
                                                                               NSLog(@"Defaults > %@", defaults);
+                                                                              [self destroyAllAdBanners];
                                                                               [self.registeredClasses removeLastObject];
                                                                               [self.registeredClasses insertObject:class atIndex:0];
+                                                                              [self startAdNetworkAdapterClassAtIndex:0];
                                                                               
                                                                               NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f \n Total banners:%f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio, totalBannerCount);
                                                                               
@@ -341,9 +343,10 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                           CGFloat bannerRatio = [[[NSUserDefaults standardUserDefaults] valueForKey:[NSStringFromClass(class) stringByAppendingString:@"Ratio"]] floatValue];
                                                                           
                                                                           if(adapterBannerCount/totalBannerCount < adRatio) {
-                                                                              
+                                                                              [self destroyAllAdBanners];
                                                                               [self.registeredClasses removeLastObject];
                                                                               [self.registeredClasses insertObject:class atIndex:0];
+                                                                              [self startAdNetworkAdapterClassAtIndex:0];
                                                                               
                                                                               NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
                                                                               
@@ -371,9 +374,10 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                        CGFloat bannerRatio = [[defaults valueForKey:[NSStringFromClass(class) stringByAppendingString:@"Ratio"]] floatValue];
                                                                        
                                                                        if(adapterBannerCount/totalBannerCount < bannerRatio  && self.registeredClasses.count > 1) {
-                                                                           
+                                                                           [self destroyAllAdBanners];
                                                                            [self.registeredClasses removeLastObject];
                                                                            [self.registeredClasses insertObject:class atIndex:0];
+                                                                           [self startAdNetworkAdapterClassAtIndex:0];
                                                                            
                                                                            NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, bannerRatio);
                                                                                                                                                       
@@ -389,9 +393,10 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                    failure:^(NSError *error) { 
                                                                                                                                           
                                                                        if(adapterBannerCount/totalBannerCount < adRatio  && self.registeredClasses.count > 1) {
-                                                                           
+                                                                           [self cleanUpAdAdapter:[self.registeredClasses objectAtIndex:0]];
                                                                            [self.registeredClasses removeLastObject];
                                                                            [self.registeredClasses insertObject:class atIndex:0];
+                                                                           [self startAdNetworkAdapterClassAtIndex:0];
                                                                            
                                                                            NSLog(@"\n %@ preferred \n Current %@ ratio %f \n Goal ratio: %f", NSStringFromClass(class), NSStringFromClass(class), adapterBannerCount/totalBannerCount, adRatio);
                                                                            
@@ -413,7 +418,7 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
         }else{
                         
             if(adapterBannerCount/totalBannerCount < adRatio && adRatioCount == 1.0) {
-                
+                [self cleanUpAdAdapter:[self.registeredClasses objectAtIndex:0]];
                 [self.registeredClasses removeLastObject];
                 [self.registeredClasses insertObject:class atIndex:0];
                 
@@ -441,13 +446,13 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
     
     id <TOLAdAdapter> adapter = [self.adapterInstances objectForKey:NSStringFromClass([self.registeredClasses objectAtIndex:0])];
     if(adapter == nil) {
-        
+        [self destroyAllAdBanners];
         [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:1]];
         if(self.registeredClasses.count >0) [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:0]];
 
         
     }else{
-        
+        [self destroyAllAdBanners];
         [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:0]];
         if(self.registeredClasses.count >0) [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:1]];
     
@@ -488,6 +493,7 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                             
                                                                             if(adapterBannerCount[i]/totalBannerCount < bannerRatio[i]) {
                                                                                 for(NSUInteger j=0; j < self.registeredClasses.count; j++) {
+                                                                                    [self destroyAllAdBanners];
                                                                                     [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:j]];
                                                                                 }
                                                                                 [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:i]];
@@ -515,6 +521,7 @@ CGFloat const kLARSAdContainerHeightPod = 50.0f;
                                                                               if(adapterBannerCount[i]/totalBannerCount < bannerRatio[i]) {
                                                                                   
                                                                                   for(NSUInteger j=0; j < self.registeredClasses.count; j++) {
+                                                                                      [self destroyAllAdBanners];
                                                                                       [self haltAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:j]];
                                                                                   }
                                                                                   [self startAdNetworkAdapterClass:[self.registeredClasses objectAtIndex:i]];
