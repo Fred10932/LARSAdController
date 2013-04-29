@@ -22,6 +22,7 @@
 
 #import "NSUserDefaults+GroundControl.h"
 #import "AFHTTPRequestOperation.h"
+#import "AFPropertyListRequestOperation.h"
 
 @interface NSUserDefaults (_GroundControl)
 + (NSOperationQueue *)gc_sharedPropertyListRequestOperationQueue;
