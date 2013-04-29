@@ -25,7 +25,7 @@
         [RevMobAds startSessionWithAppID:_publisherId];
         
         //[RevMobAds session].testingMode = RevMobAdsTestingModeWithoutAds;  //Choose this testing mode to simulate ad loading error
-      //  [[RevMobAds session] setTestingMode:RevMobAdsTestingModeWithAds];
+        [[RevMobAds session] setTestingMode:RevMobAdsTestingModeWithAds];
         
         _bannerView = [[RevMobAds session] bannerViewWithPlacementId:nil];
         _bannerView.delegate = self;
